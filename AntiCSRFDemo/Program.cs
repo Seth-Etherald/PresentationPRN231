@@ -1,5 +1,8 @@
+using AntiCSRFDemo;
 using AntiCSRFDemo.Models;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 
 internal class Program
 {
@@ -9,11 +12,18 @@ internal class Program
 
         // Add services to the container.
 
-        builder.Services.AddControllers();
-        builder.Services.AddAntiforgery();
+        builder.Services.AddControllersWithViews();
+        builder.Services.AddAntiforgery(options =>
+        {
+            // Set Cookie properties using CookieBuilder properties.
+            options.HeaderName = "X-CSRF-TOKEN";
+            options.SuppressXFrameOptionsHeader = false;
+        });
         // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
+
+        builder.Services.AddAutoMapper(typeof(MapperProfile));
 
         builder.Services.AddDbContext<SchoolContext>(
             options => options.UseSqlServer(builder.Configuration.GetConnectionString("SchoolCS"))
@@ -28,6 +38,7 @@ internal class Program
             app.UseSwaggerUI();
         }
 
+        //Generate DB
         using (var scope = app.Services.CreateScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<SchoolContext>();
@@ -45,6 +56,17 @@ internal class Program
         app.UseHttpsRedirection();
 
         app.UseAuthorization();
+
+        app.UseStaticFiles();
+
+        app.MapGet("antiforgery/token", (IAntiforgery forgeryService, HttpContext context) =>
+        {
+            var tokens = forgeryService.GetAndStoreTokens(context);
+            context.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!,
+                    new CookieOptions { HttpOnly = false });
+
+            return Results.Ok();
+        });
 
         app.MapControllers();
 
